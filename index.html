@@ -1,0 +1,701 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, collection, doc, addDoc, getDoc, getDocs, 
+  updateDoc, onSnapshot, query, where, setDoc, orderBy 
+} from 'firebase/firestore';
+import { 
+  getAuth, signInAnonymously, onAuthStateChanged, 
+  signInWithCustomToken 
+} from 'firebase/auth';
+import { 
+  Wallet, TrendingUp, Users, ArrowDownCircle, 
+  CheckCircle, XCircle, Settings, MessageCircle, LogOut, Sparkles, 
+  BrainCircuit, Bell, Copy, ShieldCheck, CreditCard, Building2, 
+  UserPlus, Mail, Phone, User, Camera, Landmark, Eye
+} from 'lucide-react';
+
+// --- Firebase Configuration ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'kashmir-trader-v5';
+
+// --- OWNER SETTINGS ---
+const ADMIN_PHONE = "03012472206";
+
+const PLANS = [
+  { id: 1, name: "Bronze", price: 1000, daily: 200 },
+  { id: 2, name: "Silver", price: 2000, daily: 400 },
+  { id: 3, name: "Gold", price: 5000, daily: 1000 },
+  { id: 4, name: "Platinum", price: 8000, daily: 1600 },
+  { id: 5, name: "Diamond", price: 10000, daily: 2000 },
+  { id: 6, name: "Master", price: 15000, daily: 3000 },
+  { id: 7, name: "Elite", price: 20000, daily: 4000 },
+  { id: 8, name: "Pro", price: 25000, daily: 5000 },
+  { id: 9, name: "Legend", price: 30000, daily: 6000 },
+  { id: 10, name: "Ultimate", price: 50000, daily: 10000 },
+];
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [userData, setUserData] = useState(null);
+  const [view, setView] = useState('login'); 
+  const [loading, setLoading] = useState(true);
+  const [clickCount, setClickCount] = useState(0);
+  const [adminSettings, setAdminSettings] = useState({
+    jazzcash: "03012472206",
+    easypaisa: "03012472206",
+    bankName: "HBL",
+    bankTitle: "Kashmir Trader",
+    bankAcc: "123456789",
+    whatsapp: "03012472206",
+    referPercent: 20
+  });
+
+  useEffect(() => {
+    const initAuth = async () => {
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        await signInWithCustomToken(auth, __initial_auth_token);
+      } else {
+        await signInAnonymously(auth);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const settingsDoc = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'settings');
+    return onSnapshot(settingsDoc, (s) => {
+      if (s.exists()) setAdminSettings(prev => ({...prev, ...s.data()}));
+    });
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const userDoc = doc(db, 'artifacts', appId, 'public', 'data', 'users', user.uid);
+    return onSnapshot(userDoc, (s) => {
+      if (s.exists()) {
+        setUserData(s.data());
+        if (view === 'login' || view === 'register') setView('dashboard');
+      } else {
+        setUserData(null);
+      }
+      setLoading(false);
+    });
+  }, [user, view]);
+
+  const handleSecretClick = () => {
+    if (userData?.phone !== ADMIN_PHONE) return;
+    const newCount = clickCount + 1;
+    setClickCount(newCount);
+    if (newCount >= 3) {
+      setView('admin');
+      setClickCount(0);
+    }
+    setTimeout(() => setClickCount(0), 2000); 
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const name = formData.get('name');
+    const surname = formData.get('surname');
+    const email = formData.get('email');
+    const phone = formData.get('phone');
+    const password = formData.get('password');
+    const referBy = formData.get('referBy')?.trim();
+
+    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'users'), where("phone", "==", phone));
+    const snap = await getDocs(q);
+    if (!snap.empty) return alert("Yeh phone number pehle se mojood hai!");
+
+    const newUser = {
+      uid: user.uid,
+      name,
+      surname,
+      email,
+      phone,
+      password,
+      balance: 0,
+      activePlans: [],
+      referBy: referBy || null,
+      isAdmin: phone === ADMIN_PHONE,
+      createdAt: new Date().toISOString()
+    };
+    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', user.uid), newUser);
+    setView('dashboard');
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const phone = formData.get('phone');
+    const password = formData.get('password');
+    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'users'), where("phone", "==", phone));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const u = snap.docs[0].data();
+      if (u.password === password) {
+        setUserData(u);
+        setView('dashboard');
+      } else { alert("Ghalat Password!"); }
+    } else { alert("Account nahi mila!"); }
+  };
+
+  if (loading) return (
+    <div className="min-h-screen bg-gradient-to-br from-green-900 to-blue-900 flex flex-col items-center justify-center text-white font-black italic">
+      <div className="text-4xl animate-bounce mb-4">KT</div>
+      <div className="tracking-[0.5em] text-xs opacity-50 uppercase">Kashmir Trader Pro</div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50 pb-24 font-sans selection:bg-blue-200">
+      <header className="bg-gradient-to-r from-green-700 to-blue-800 text-white p-5 shadow-xl flex justify-between items-center sticky top-0 z-50 rounded-b-[2.5rem]">
+        <h1 onClick={handleSecretClick} className="text-xl font-black italic tracking-tight cursor-pointer select-none drop-shadow-lg">
+          KASHMIR TRADER
+        </h1>
+        {userData && (
+          <div className="flex gap-2">
+            <button onClick={() => setView('login')} className="bg-white/10 p-2 rounded-full backdrop-blur-md border border-white/20 hover:bg-white/20"><LogOut size={18} /></button>
+          </div>
+        )}
+      </header>
+
+      {view === 'register' && <AuthForm type="Register" onSubmit={handleRegister} setView={setView} />}
+      {view === 'login' && <AuthForm type="Login" onSubmit={handleLogin} setView={setView} />}
+      {view === 'dashboard' && <UserDashboard userData={userData} adminSettings={adminSettings} />}
+      {view === 'admin' && userData?.phone === ADMIN_PHONE && <AdminPanel adminSettings={adminSettings} />}
+      {view === 'buyPlan' && <BuyPlan userData={userData} adminSettings={adminSettings} setView={setView} />}
+      {view === 'withdraw' && <WithdrawPage userData={userData} setView={setView} />}
+      {view === 'team' && <TeamPage userData={userData} adminSettings={adminSettings} />}
+
+      {userData && view !== 'admin' && (
+        <nav className="fixed bottom-4 left-4 right-4 bg-white/95 backdrop-blur-3xl border border-white/40 flex justify-around p-4 shadow-2xl z-50 rounded-[3rem]">
+          <NavItem icon={<TrendingUp size={24}/>} label="Home" active={view==='dashboard'} onClick={()=>setView('dashboard')} />
+          <NavItem icon={<Wallet size={24}/>} label="Invest" active={view==='buyPlan'} onClick={()=>setView('buyPlan')} />
+          <NavItem icon={<Users size={24}/>} label="Team" active={view==='team'} onClick={()=>setView('team')} />
+          <NavItem icon={<ArrowDownCircle size={24}/>} label="Withdraw" active={view==='withdraw'} onClick={()=>setView('withdraw')} />
+        </nav>
+      )}
+    </div>
+  );
+}
+
+function NavItem({ icon, label, active, onClick }) {
+  return (
+    <button onClick={onClick} className={`flex flex-col items-center transition-all duration-300 ${active ? 'text-blue-600 scale-110 drop-shadow-xl' : 'text-gray-400'}`}>
+      {icon}
+      <span className="text-[8px] font-black mt-1 uppercase tracking-tighter">{label}</span>
+    </button>
+  );
+}
+
+function AuthForm({ type, onSubmit, setView }) {
+  return (
+    <div className="p-8 max-w-md mx-auto mt-6 bg-white rounded-[3.5rem] shadow-2xl border-b-[12px] border-blue-700 mx-4 animate-in fade-in zoom-in-95 duration-500">
+      <div className="w-16 h-1 bg-gradient-to-r from-green-500 to-blue-500 mx-auto rounded-full mb-6"></div>
+      <h2 className="text-2xl font-black text-center mb-1 text-gray-800 italic uppercase">Kashmir Pro</h2>
+      <p className="text-center text-gray-400 text-[10px] font-black mb-8 tracking-[0.3em] uppercase underline decoration-green-500 decoration-2">Premium Trading</p>
+      
+      <form onSubmit={onSubmit} className="space-y-3">
+        {type === 'Register' && (
+          <>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <User size={14} className="absolute left-4 top-4 text-gray-400" />
+                <input name="name" required placeholder="Name" className="w-full p-4 pl-10 bg-gray-50 border-2 border-gray-100 rounded-2xl outline-none focus:border-green-500 text-sm font-bold" />
+              </div>
+              <div className="relative flex-1">
+                <input name="surname" required placeholder="Surname" className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl outline-none focus:border-green-500 text-sm font-bold" />
+              </div>
+            </div>
+            <div className="relative">
+              <Mail size={14} className="absolute left-4 top-4 text-gray-400" />
+              <input name="email" type="email" required placeholder="Email Address" className="w-full p-4 pl-10 bg-gray-50 border-2 border-gray-100 rounded-2xl outline-none focus:border-green-500 text-sm font-bold" />
+            </div>
+          </>
+        )}
+        <div className="relative">
+          <Phone size={14} className="absolute left-4 top-4 text-gray-400" />
+          <input name="phone" required placeholder="Phone (e.g. 0300...)" className="w-full p-4 pl-10 bg-gray-50 border-2 border-gray-100 rounded-2xl outline-none focus:border-blue-500 text-sm font-bold" />
+        </div>
+        <input name="password" type="password" required placeholder="Password" className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl outline-none focus:border-blue-500 text-sm font-bold" />
+        {type === 'Register' && <input name="referBy" placeholder="Referral Phone (Optional)" className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl outline-none text-sm font-bold" />}
+        
+        <button className="w-full bg-gradient-to-r from-green-600 to-blue-700 text-white p-5 rounded-[2rem] font-black text-lg shadow-xl uppercase active:scale-95 transition-transform mt-4 border-b-4 border-blue-900">
+          {type === 'Login' ? 'Login Account' : 'Create Account'}
+        </button>
+      </form>
+      
+      <div className="mt-8 text-center text-[10px] font-black text-gray-400 tracking-widest uppercase">
+        {type === 'Login' ? <span>Naya account? <button onClick={() => setView('register')} className="text-blue-600 underline">Register</button></span> : 
+        <span>Pehle se account hai? <button onClick={() => setView('login')} className="text-green-600 underline">Login</button></span>}
+      </div>
+    </div>
+  );
+}
+
+function UserDashboard({ userData, adminSettings }) {
+  const activePlanIds = userData.activePlans || [];
+  const activePlanDetails = PLANS.filter(p => activePlanIds.includes(p.id));
+  const totalDaily = activePlanDetails.reduce((acc, p) => acc + p.daily, 0);
+
+  return (
+    <div className="p-4 space-y-6 animate-in slide-in-from-bottom-4 duration-500">
+      <div className="bg-gradient-to-br from-green-700 via-blue-800 to-blue-900 p-8 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden border-b-8 border-black/20">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
+        <div className="relative z-10">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <p className="text-[10px] font-black opacity-60 tracking-[0.3em] uppercase">Wallet Balance</p>
+              <h3 className="text-5xl font-black tracking-tighter drop-shadow-md mt-1">
+                <span className="text-xl font-bold mr-1 opacity-50">Rs.</span>
+                {userData.balance?.toLocaleString()}
+              </h3>
+            </div>
+            <div className="bg-white/20 p-2 rounded-2xl backdrop-blur-md">
+              <TrendingUp size={20} />
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4 mt-8">
+            <div className="bg-white/10 backdrop-blur-xl p-4 rounded-3xl border border-white/20 shadow-inner">
+              <p className="text-[8px] uppercase font-black opacity-60 mb-1">Total Daily Profit</p>
+              <p className="text-xl font-black">Rs. {totalDaily}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-xl p-4 rounded-3xl border border-white/20 shadow-inner">
+              <p className="text-[8px] uppercase font-black opacity-60 mb-1">Commission</p>
+              <p className="text-xl font-black">{adminSettings.referPercent}%</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex justify-between items-center px-2">
+          <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Active Plans ({activePlanIds.length}/2)</h4>
+        </div>
+        
+        {activePlanDetails.length > 0 ? activePlanDetails.map((plan, idx) => (
+          <div key={idx} className="bg-white p-5 rounded-[2.5rem] shadow-lg border-l-8 border-green-500 flex justify-between items-center animate-in fade-in slide-in-from-left duration-300">
+            <div>
+              <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Portfolio {idx + 1}</p>
+              <p className="text-xl font-black text-gray-800 italic uppercase">{plan.name}</p>
+              <p className="text-xs font-bold text-green-600">Profit: Rs. {plan.daily}/Day</p>
+            </div>
+            <div className="w-12 h-12 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center">
+              <ShieldCheck size={24} />
+            </div>
+          </div>
+        )) : (
+          <div className="bg-gray-100 border-2 border-dashed border-gray-200 p-8 rounded-[2.5rem] text-center">
+            <p className="text-xs font-black text-gray-400 uppercase italic">No Active Investment</p>
+            <button className="text-blue-600 text-[10px] font-black mt-2 underline uppercase">Buy Plan Now</button>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border-t-4 border-blue-100">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center">
+            <User size={24} />
+          </div>
+          <div>
+            <p className="text-lg font-black text-gray-800 uppercase italic leading-none">{userData.name} {userData.surname}</p>
+            <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase">Member ID: {userData.phone}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WithdrawPage({ userData, setView }) {
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState("JazzCash");
+  const [accNo, setAccNo] = useState("");
+
+  const handleWithdraw = async () => {
+    const amt = Number(amount);
+    if (!accNo || amt < 200) return alert("Sahi details likhein! (Min 200)");
+    if (amt > userData.balance) return alert("Aapka balance kam hai!");
+    
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'withdrawals'), {
+      userId: userData.uid, 
+      phone: userData.phone,
+      name: userData.name + " " + userData.surname,
+      amount: amt, 
+      method, 
+      accNo,
+      status: 'pending', 
+      timestamp: new Date().toISOString()
+    });
+    
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', userData.uid), { 
+      balance: userData.balance - amt 
+    });
+    
+    alert("Withdrawal request bhej di gayi hai! SMS jald mil jayega.");
+    setView('dashboard');
+  };
+
+  return (
+    <div className="p-6">
+      <div className="bg-white p-8 rounded-[3.5rem] shadow-2xl border-t-[10px] border-blue-700">
+        <h2 className="text-2xl font-black text-center mb-1 italic uppercase tracking-tighter text-gray-800">Cashing Out</h2>
+        <p className="text-center text-[10px] font-bold text-gray-400 uppercase mb-8 underline">Fast SMS Approval</p>
+        
+        <div className="bg-blue-50 p-6 rounded-[2rem] mb-6 text-center border-2 border-blue-100">
+          <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Available</p>
+          <p className="text-3xl font-black text-blue-800">Rs. {userData.balance}</p>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            {['JazzCash', 'EasyPaisa', 'Bank'].map(m => (
+              <button 
+                key={m} 
+                onClick={() => setMethod(m)}
+                className={`flex-1 p-4 rounded-2xl text-[10px] font-black uppercase transition-all shadow-md ${method === m ? 'bg-blue-700 text-white border-b-4 border-blue-900' : 'bg-gray-100 text-gray-400 border-b-4 border-gray-200'}`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+          
+          <input 
+            value={accNo} 
+            onChange={e => setAccNo(e.target.value)} 
+            placeholder={`Enter ${method} Number`} 
+            className="w-full p-5 bg-gray-50 border-2 border-gray-100 rounded-3xl font-bold outline-none focus:border-blue-500 text-center" 
+          />
+          
+          <input 
+            type="number" 
+            value={amount} 
+            onChange={e => setAmount(e.target.value)} 
+            placeholder="Min Rs. 200" 
+            className="w-full p-6 bg-gray-50 rounded-3xl text-4xl font-black text-center outline-none focus:ring-4 focus:ring-blue-100 border-2 border-transparent" 
+          />
+          
+          <button 
+            onClick={handleWithdraw} 
+            className="w-full bg-gradient-to-r from-blue-700 to-green-600 text-white p-6 rounded-[2.5rem] font-black text-xl uppercase shadow-2xl active:scale-95 transition-transform border-b-8 border-black/20"
+          >
+            Request Cash
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminPanel({ adminSettings }) {
+  const [deposits, setDeposits] = useState([]);
+  const [withdraws, setWithdraws] = useState([]);
+  const [settings, setSettings] = useState(adminSettings);
+  const [viewingImage, setViewingImage] = useState(null);
+
+  useEffect(() => {
+    const unsubD = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'deposits'), s => setDeposits(s.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+    const unsubW = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'withdrawals'), s => setWithdraws(s.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+    return () => { unsubD(); unsubW(); };
+  }, []);
+
+  const approvePlan = async (req) => {
+    const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', req.userId);
+    const uSnap = await getDoc(userRef);
+    if (!uSnap.exists()) return;
+    const uData = uSnap.data();
+
+    const currentPlans = uData.activePlans || [];
+    if (currentPlans.length >= 2) return alert("User already has 2 active plans!");
+    
+    await updateDoc(userRef, { activePlans: [...currentPlans, req.planId] });
+    
+    if (uData.referBy) {
+      const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'users'), where("phone", "==", uData.referBy));
+      const refSnap = await getDocs(q);
+      if (!refSnap.empty) {
+        const refDoc = refSnap.docs[0];
+        const bonus = (req.amount * (Number(settings.referPercent) / 100));
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', refDoc.id), {
+          balance: (refDoc.data().balance || 0) + bonus
+        });
+      }
+    }
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'deposits', req.id), { status: 'approved' });
+  };
+
+  return (
+    <div className="p-4 space-y-8 pb-32 animate-in fade-in duration-500 max-w-lg mx-auto">
+      <div className="flex justify-between items-end border-b-4 border-black pb-2">
+        <h2 className="text-3xl font-black text-blue-800 italic uppercase tracking-tighter">Boss Control</h2>
+        <div className="bg-red-600 text-white px-2 py-1 rounded text-[8px] font-black animate-pulse uppercase">Live Database</div>
+      </div>
+      
+      <div className="bg-gray-900 text-white p-6 rounded-[2.5rem] shadow-2xl space-y-4 border-b-8 border-blue-900">
+        <p className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">Payment Methods Config</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <p className="text-[8px] font-black uppercase opacity-50">JazzCash</p>
+            <input className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-xs font-bold" value={settings.jazzcash} onChange={e => setSettings({...settings, jazzcash: e.target.value})} />
+          </div>
+          <div className="space-y-1">
+            <p className="text-[8px] font-black uppercase opacity-50">EasyPaisa</p>
+            <input className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-xs font-bold" value={settings.easypaisa} onChange={e => setSettings({...settings, easypaisa: e.target.value})} />
+          </div>
+        </div>
+
+        <p className="text-[10px] font-black text-green-400 uppercase tracking-[0.2em] mt-4">Bank Details</p>
+        <div className="space-y-3">
+          <input className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-xs font-bold" value={settings.bankName} onChange={e => setSettings({...settings, bankName: e.target.value})} placeholder="Bank Name" />
+          <div className="grid grid-cols-2 gap-3">
+            <input className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-xs font-bold" value={settings.bankTitle} onChange={e => setSettings({...settings, bankTitle: e.target.value})} placeholder="Account Title" />
+            <input className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-xs font-bold" value={settings.bankAcc} onChange={e => setSettings({...settings, bankAcc: e.target.value})} placeholder="Acc Number" />
+          </div>
+        </div>
+
+        <p className="text-[10px] font-black text-yellow-400 uppercase tracking-[0.2em] mt-4">Support & Referral</p>
+        <div className="grid grid-cols-2 gap-3">
+          <input className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-xs font-bold" value={settings.whatsapp} onChange={e => setSettings({...settings, whatsapp: e.target.value})} placeholder="WhatsApp Number" />
+          <input className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-xs font-bold" type="number" value={settings.referPercent} onChange={e => setSettings({...settings, referPercent: e.target.value})} placeholder="Referral %" />
+        </div>
+
+        <button onClick={() => setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'settings'), settings)} className="w-full bg-blue-600 hover:bg-blue-500 text-white p-4 rounded-2xl font-black text-xs uppercase shadow-lg transition-all active:scale-95 border-b-4 border-blue-800">Save System Settings</button>
+      </div>
+
+      <div className="space-y-4">
+        <h3 className="font-black text-[10px] text-green-700 uppercase tracking-widest border-l-4 border-green-500 pl-2">Pending Plan Requests ({deposits.filter(d=>d.status==='pending').length})</h3>
+        {deposits.filter(d => d.status === 'pending').map(d => (
+          <div key={d.id} className="bg-white p-6 rounded-[2.5rem] shadow-xl border-2 border-gray-100 flex justify-between items-center relative overflow-hidden group transition-all hover:border-green-200">
+            <div className="absolute top-0 left-0 w-1 h-full bg-green-500 group-hover:w-2 transition-all"></div>
+            <div className="text-xs space-y-1">
+              <p className="font-black text-lg uppercase italic text-gray-800 leading-none">{d.planName}</p>
+              <p className="text-green-600 font-black tracking-tighter text-md">Amount: Rs. {d.amount}</p>
+              <div className="bg-gray-100 p-2 rounded-xl mt-2">
+                <p className="text-gray-500 font-bold text-[9px]">TID: <span className="text-gray-800">{d.tid}</span></p>
+                <p className="text-gray-500 font-bold text-[9px]">User: <span className="text-gray-800">{d.phone}</span></p>
+              </div>
+              {d.screenshot && (
+                <button 
+                  onClick={() => setViewingImage(d.screenshot)}
+                  className="mt-2 flex items-center gap-1 text-blue-600 font-black text-[9px] uppercase bg-blue-50 px-2 py-1 rounded-lg"
+                >
+                  <Eye size={10} /> View Screenshot
+                </button>
+              )}
+            </div>
+            <button onClick={() => approvePlan(d)} className="bg-green-600 text-white px-6 py-4 rounded-[1.5rem] font-black text-xs shadow-lg active:scale-90 transition border-b-4 border-green-800">APPROVE</button>
+          </div>
+        ))}
+      </div>
+      
+      <div className="space-y-4">
+        <h3 className="font-black text-[10px] text-blue-800 uppercase tracking-widest border-l-4 border-blue-500 pl-2">Withdrawal Queue ({withdraws.filter(w=>w.status==='pending').length})</h3>
+        {withdraws.filter(w => w.status === 'pending').map(w => (
+          <div key={w.id} className="bg-white p-6 rounded-[2.5rem] shadow-xl border-b-8 border-blue-50 space-y-4 transition-all hover:-translate-y-1">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-2xl font-black text-gray-900 tracking-tighter leading-none">Rs. {w.amount}</p>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter">{w.method}</span>
+                  <span className="text-[10px] font-bold text-gray-400">{w.name}</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-black text-gray-800">{w.accNo}</p>
+                <p className="text-[8px] font-bold text-gray-400 mt-1 uppercase">A/C Number</p>
+              </div>
+            </div>
+            <button onClick={async () => await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'withdrawals', w.id), { status: 'done' })} className="w-full bg-blue-800 text-white p-4 rounded-2xl text-[10px] font-black uppercase shadow-lg border-b-4 border-blue-950">Confirm Paid (SMS Sent)</button>
+          </div>
+        ))}
+      </div>
+
+      {viewingImage && (
+        <div className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center p-4">
+          <img src={viewingImage} alt="Payment Receipt" className="max-w-full max-h-[80vh] rounded-2xl shadow-2xl" />
+          <button onClick={() => setViewingImage(null)} className="mt-8 bg-white text-black px-12 py-4 rounded-full font-black uppercase text-xs">Close Preview</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BuyPlan({ userData, adminSettings, setView }) {
+  const [selected, setSelected] = useState(null);
+  const [tid, setTid] = useState("");
+  const [screenshot, setScreenshot] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
+  const activeCount = userData.activePlans?.length || 0;
+
+  const handleBuy = async () => {
+    if (activeCount >= 2) return alert("Aap ek waqt mein sirf 2 plans active kar sakte hain!");
+    if (!tid) return alert("Transaction ID Enter Karein!");
+    
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'deposits'), {
+      userId: userData.uid, 
+      phone: userData.phone, 
+      planId: selected.id, 
+      planName: selected.name,
+      amount: selected.price, 
+      tid, 
+      screenshot,
+      status: 'pending', 
+      timestamp: new Date().toISOString()
+    });
+    alert("Payment submitted! Admin will verify your screenshot and TID.");
+    setView('dashboard');
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setUploading(true);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setScreenshot(reader.result);
+        setUploading(false);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  return (
+    <div className="p-4 space-y-4 animate-in fade-in duration-500 max-w-md mx-auto">
+      <h2 className="text-2xl font-black text-center text-blue-800 uppercase italic tracking-tighter">Market Packages</h2>
+      <p className="text-center text-[10px] font-bold text-gray-400 uppercase -mt-2">Trading Limit: 2 Active Plans</p>
+      
+      {!selected ? (
+        <div className="grid grid-cols-1 gap-4">
+          {PLANS.map(p => (
+            <div key={p.id} onClick={() => setSelected(p)} className="bg-white p-6 rounded-[3rem] shadow-xl border-2 border-transparent active:border-blue-600 flex justify-between items-center transition-all group hover:bg-blue-50/30">
+              <div className="flex-1">
+                <h4 className="font-black text-xl uppercase italic tracking-tighter text-gray-800 group-active:text-blue-600">{p.name}</h4>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <p className="text-blue-700 font-black text-lg">Rs. {p.price.toLocaleString()}</p>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">Return: Rs. {p.daily}/Day</p>
+                </div>
+              </div>
+              <div className="bg-gradient-to-br from-blue-50 to-green-50 text-blue-600 p-5 rounded-[2rem] shadow-inner group-active:scale-90 transition-transform"><TrendingUp size={28}/></div>
+            </div>
+          ))}
+          <a href={`https://wa.me/${adminSettings.whatsapp}`} target="_blank" className="flex items-center justify-center gap-3 bg-green-500 text-white p-6 rounded-[2.5rem] shadow-xl font-black uppercase text-sm mt-4 active:scale-95 transition-all">
+            <MessageCircle size={24} /> Contact Support
+          </a>
+        </div>
+      ) : (
+        <div className="bg-white p-8 rounded-[4rem] shadow-2xl border-4 border-blue-100 animate-in zoom-in-95 duration-300 relative">
+          <button onClick={() => setSelected(null)} className="text-[9px] font-black text-gray-400 mb-6 uppercase tracking-[0.2em] flex items-center gap-2 hover:text-blue-600">
+            <span className="bg-gray-100 p-2 rounded-full">←</span> Portfolio Menu
+          </button>
+          
+          <div className="text-center mb-8">
+            <h3 className="text-3xl font-black uppercase italic text-gray-800">{selected.name}</h3>
+            <p className="text-blue-600 font-black text-xl mt-1">Investment: Rs. {selected.price}</p>
+          </div>
+
+          <div className="bg-gray-900 p-8 rounded-[3rem] text-white shadow-2xl space-y-6 relative overflow-hidden mb-8 border-b-8 border-blue-800">
+            <div className="absolute bottom-0 right-0 w-24 h-24 bg-blue-600/20 rounded-full blur-2xl"></div>
+            <div className="flex justify-between items-center border-b border-white/10 pb-4">
+              <p className="text-[10px] font-black opacity-50 uppercase tracking-widest flex items-center gap-2"><CreditCard size={12}/> JazzCash</p>
+              <p className="text-lg font-black text-yellow-400">{adminSettings.jazzcash}</p>
+            </div>
+            <div className="flex justify-between items-center border-b border-white/10 pb-4">
+              <p className="text-[10px] font-black opacity-50 uppercase tracking-widest flex items-center gap-2"><CreditCard size={12}/> EasyPaisa</p>
+              <p className="text-lg font-black text-yellow-400">{adminSettings.easypaisa}</p>
+            </div>
+            <div className="pt-2">
+              <p className="text-[10px] font-black opacity-50 uppercase tracking-widest mb-3 flex items-center gap-2"><Building2 size={12}/> Bank Transfer</p>
+              <div className="bg-white/5 p-4 rounded-2xl space-y-1">
+                <p className="text-xs font-black text-green-400">{adminSettings.bankName}</p>
+                <p className="text-sm font-black">{adminSettings.bankAcc}</p>
+                <p className="text-[10px] font-bold opacity-60">{adminSettings.bankTitle}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <p className="text-left text-[9px] font-black text-gray-400 uppercase tracking-widest ml-4 mb-2">1. TID Code</p>
+                <input 
+                  value={tid} 
+                  onChange={e => setTid(e.target.value)} 
+                  placeholder="Enter TID" 
+                  className="w-full p-5 bg-gray-50 border-2 border-gray-100 rounded-3xl font-black text-center text-lg outline-none focus:border-blue-600 focus:bg-white transition-all shadow-inner" 
+                />
+              </div>
+            </div>
+
+            <div className="relative">
+              <p className="text-left text-[9px] font-black text-gray-400 uppercase tracking-widest ml-4 mb-2">2. Upload Receipt</p>
+              <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" />
+              <button 
+                onClick={() => fileInputRef.current.click()}
+                className={`w-full p-5 rounded-3xl border-2 border-dashed flex items-center justify-center gap-3 transition-all ${screenshot ? 'border-green-400 bg-green-50 text-green-700' : 'border-gray-200 bg-gray-50 text-gray-400'}`}
+              >
+                {uploading ? <div className="animate-spin rounded-full h-5 w-5 border-2 border-gray-400 border-t-transparent"></div> : (screenshot ? <CheckCircle size={20}/> : <Camera size={20}/>)}
+                <span className="text-xs font-black uppercase tracking-tighter">{screenshot ? 'Receipt Added' : 'Add Screenshot'}</span>
+              </button>
+            </div>
+            
+            <button 
+              onClick={handleBuy} 
+              disabled={uploading}
+              className="w-full bg-gradient-to-r from-blue-700 to-green-600 text-white p-6 rounded-[2.5rem] font-black text-xl uppercase shadow-2xl active:scale-95 transition-transform border-b-8 border-black/20 mt-4 disabled:opacity-50"
+            >
+              Verify Payment
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TeamPage({ userData, adminSettings }) {
+  const [team, setTeam] = useState([]);
+  useEffect(() => {
+    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'users'), where("referBy", "==", userData.phone));
+    getDocs(q).then(s => setTeam(s.docs.map(d => d.data())));
+  }, [userData]);
+
+  return (
+    <div className="p-4 space-y-6 animate-in slide-in-from-right duration-500 max-w-md mx-auto">
+      <h2 className="text-2xl font-black italic text-blue-800 uppercase tracking-tighter ml-2">Global Network</h2>
+      
+      <div className="bg-white p-12 rounded-[4rem] shadow-2xl text-center border-b-[12px] border-green-600 relative overflow-hidden group">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-green-50 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-700"></div>
+        <Users className="mx-auto text-blue-700 mb-6 relative z-10" size={64} />
+        <p className="text-gray-400 font-black text-[10px] uppercase tracking-[0.3em] mb-2">Network Partners</p>
+        <h3 className="text-7xl font-black text-gray-800 mb-6 tracking-tighter drop-shadow-md">{team.length}</h3>
+        <div className="bg-blue-50 inline-block px-6 py-2 rounded-full">
+          <p className="text-blue-700 font-black text-[10px] uppercase">Bonus Reward: {adminSettings.referPercent}%</p>
+        </div>
+      </div>
+
+      <div className="bg-white p-8 rounded-[3rem] shadow-xl border-2 border-gray-50">
+        <p className="text-[10px] font-black text-gray-400 uppercase mb-4 tracking-[0.2em] text-center">Referral ID (Your Phone)</p>
+        <div className="flex gap-3 bg-gray-50 p-2 rounded-[2rem] border-2 border-dashed border-gray-200">
+          <div className="flex-1 p-4 text-xl font-black text-gray-800 text-center tracking-widest">{userData.phone}</div>
+          <button 
+            onClick={() => {navigator.clipboard.writeText(userData.phone); alert("ID Copied!")}} 
+            className="bg-blue-700 text-white px-8 rounded-[1.5rem] shadow-lg active:scale-90 transition border-b-4 border-blue-950"
+          >
+            <Copy size={20}/>
+          </button>
+        </div>
+        <p className="text-[8px] font-bold text-center text-gray-400 mt-4 uppercase italic">Share this ID to earn commission on every plan activation.</p>
+      </div>
+    </div>
+  );
+}
